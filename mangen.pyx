@@ -1,26 +1,29 @@
 import argparse
 from datetime import date
 import json
+import jsonschema
 import sys
 import os.path
 import argparse
 
+schemaFile = r'../argspec/arguments.schema.json'
+
 class TroffArgumentParser(object):
 	def __init__(self, json:dict=None, licence:[str]=[], version:str=None, seeAlso:[str]=[], date:str=date.today().strftime('%d %B %Y'), bugs:str=None, *args, **kwargs):
 		super(TroffArgumentParser, self).__init__(*args, **kwargs)
-		self.prog = json['prog'] if json is not None and 'prog' in json else ''
+		self.prog = json['program'] if json is not None and 'prog' in json else ''
 		self.description = json['description'] if json is not None and 'description' in json else '' 
 		self.licence = json['licence'] if json is not None and 'licence' in json else licence
 		self.version = json['version'] if json is not None and 'version' in json else version
 		self.date = json['date'] if json is not None and 'date' in json else date
 		self.seeAlso = json['seeAlso'] if json is not None and 'seeAlso' in json else seeAlso
 		self.bugs = json['bugs'] if json is not None and 'bugs' in json else bugs
-		self._actions:[argparse.Action] = json['actions'] if json is not None and 'actions' in json else []
-		self.epilog = json['epilog'] if json is not None and 'epilog' in json else None
+		self._actions:[argparse.Action] = json['args'] if json is not None and 'args' in json else []
+		self.epilog = json['about'] if json is not None and 'about' in json else None
 
 	def toTroff(self) -> str:
 		options:[argparse.Action] = self._actions
-		options.sort(key=lambda option : option['required'])
+		options.sort(key=lambda option : option['mandatory'])
 
 		troffOutput:str = self._header(self.prog, self.date, self.version, self.licence)
 		troffOutput += self._name(self.prog, self.description)
@@ -62,7 +65,7 @@ class TroffArgumentParser(object):
 			previousWasMandatory:bool = False
 			mandatory:bool = False
 			for option in options:
-				mandatory = option['required']
+				mandatory = option['mandatory']
 				if firstOption:
 					if mandatory:
 						description += f'\n.SS "Mandatory arguments"'
@@ -93,7 +96,7 @@ class TroffArgumentParser(object):
 				optionDescription:str = f'\n.TP\n{optionString}\n{optionHelp}'
 				description += optionDescription
 				firstOption = False
-				previousWasMandatory = option['required']
+				previousWasMandatory = option['mandatory']
 			return description + '\n'
 
 	def _formatList(self, lst:[str], separator:str=', ') -> str:
@@ -108,17 +111,14 @@ class TroffArgumentParser(object):
 				formattedList += item
 		return formattedList
 
-	def _seeAlso(self, seeAlso:[str]) -> str:
+	def _seeAlso(self, seeAlso:[dict]) -> str:
 		if seeAlso == []:
 			return ''
 		else:
-			# seeAlso = list(map(lambda see: '('.join(see.split('(')), seeAlso))
-			for i in range(len(seeAlso)):
-				split:[str] = seeAlso[i].split('(')
-				see:str = split[0]
-				sec:str = split[1].replace(')', '')
-				seeAlso[i] = f'\\fB{see}\\fR({sec})'
-			seeAlsos:str = ', '.join(seeAlso)
+			seeAlsoStrings:[str] = []
+			for x in seeAlso:
+				seeAlsoStrings += f'\\fB{x.name}({x.manLocation})'
+			seeAlsos:str = ', '.join(seeAlsoStrings)
 			return f'.SH "SEE ALSO"\n{seeAlsos}\n'
 
 	def _bugs(self, bugs:str) -> str:
@@ -144,6 +144,7 @@ def parseArguments(args:[str]) -> argparse.Namespace:
 		parser.print_usage(sys.stderr)
 	
 	return parser.parse_args(args)
+
 
 def main(args:[str]) -> int:
 	arguments:argparse.Namespace = parseArguments(args)
@@ -174,6 +175,18 @@ def main(args:[str]) -> int:
 		printe(jsonDe)
 		return 1
 
+	schema:dict
+	with open(schemaFile, 'r+') as i:
+		schema = json.load(i)
+	 # schema = json.loads(rawSchema)
+
+	try:
+		jsonschema.validate(instance=jsonDict, schema=schema)
+	except jsonschema.exceptions.ValidationError as ve:
+		printe(f'Input specification did not match the schema (using schema: "{schemaFile}"')
+		printe(str(ve))
+		return -1
+
 	troffArgumentParser:TroffArgumentParser = TroffArgumentParser(json=jsonDict)
 
 	# Output
@@ -185,6 +198,7 @@ def main(args:[str]) -> int:
 			o.write(outputString)
 
 	return 0
+
 
 if __name__ == '__main__':
 	sys.exit(main(sys.argv[1:]))
