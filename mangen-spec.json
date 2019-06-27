@@ -15,6 +15,7 @@
 			"output": "program.1 now contains the man page specified in spec.json"
 		}
 	],
+	"autoGenerateSynopsis": true,
 	"args": [
 		{
 			"mandatory": false,

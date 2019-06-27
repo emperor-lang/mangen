@@ -3,6 +3,7 @@
 import json
 import jsonschema
 import sys
+import re
 from cpython cimport bool
 
 schemaFile:str = '../argspec/user-arguments-schema.json'
@@ -40,7 +41,13 @@ cdef class Program:
 		self.autoGenerateSynopsis = program['autoGenerateSynopsis']			if 'autoGenerateSynopsis' in program else	True
 
 	cdef str formatGroff(self, inputString:str):
+		# Rudamendary MD to roff converter---THIS IS REGULAR NOT CONTEXT FREE!
 		inputLines:[str] = inputString.split('\n')
+		for i in range(len(inputLines)):
+			inputLines[i] = inputLines[i].strip()
+			inputLines[i] = (re.sub(r'`([^\s`]*)`', r'\\fB\1\\fP', inputLines[i]))
+			inputLines[i] = (re.sub(r'(\s|\(|\)|\|)_([^_]*)_(\s|\(|\)|\|)', r'\1\\fI\2\\fP\3', inputLines[i]))
+			inputLines[i] = (re.sub(r'(\s|\(|\)|\|)\*\*([^\*]*)\*\*(\s|\(|\)|\|)', r'\1\\fB\2\\fP\3', inputLines[i]))
 		return '\n.PP\n'.join(inputLines)
 
 	def __dealloc__(self) -> None:
@@ -86,10 +93,21 @@ cdef class Program:
 			toReturn.append(programDescription)
 
 		# Prepare synopsis
+		synopsis:[str] = []
+		if self.examples != [] or (self.autoGenerateSynopsis and self.args != []):
+			toReturn.append('.SH SYNOPSIS')
+		# Automatically from arguments
+		if self.autoGenerateSynopsis and self.args != []:
+			# Generate a synopsis
+			synopsisParts:[str] = [f'\\fB{self.title}\\fP']
+			self.args.sort(key=lambda arg:arg['mandatory'])
+			for argument in self.args:
+				argumentString:str = argument['short'] if 'short' in argument else argument['long']
+				synopsisParts.append(f"[\\fB{argumentString}\\fP]")
+			synopsis.append(' '.join(synopsisParts))
+		# From examples
 		if self.examples != []:
 			# Use specified synopsis
-			toReturn.append('.SH SYNOPSIS')
-			synopsis:[str] = []
 			for example in self.examples:
 				exampleParts:[str] = example['input'].split(' ')
 				synopsisString:str = f'\\fB{exampleParts[0]}\\fP'
@@ -113,16 +131,8 @@ cdef class Program:
 							else:
 								synopsisString += char
 				synopsis.append(synopsisString)
+		if synopsis != []:
 			toReturn.append('\n.br\n'.join(synopsis))
-		elif self.autoGenerateSynopsis and self.args != []:
-			# Generate a synopsis
-			toReturn.append('.SH SYNOPSIS')
-			synopsis:list = [f'\\fB{self.title}\\fP']
-			self.args.sort(key=lambda arg:arg['mandatory'])
-			for argument in self.args:
-				argumentString:str = argument['short'] if 'short' in argument else argument['long']
-				synopsis.append(f"[\\fB{argumentString}\\fP]")
-			toReturn.append(' '.join(synopsis))
 		
 		# Prepare arguments
 		if self.args != []:
@@ -139,7 +149,7 @@ cdef class Program:
 					if choicesString is not None:	
 						argumentForm += ' ' + choicesString
 					argumentForms.append(argumentForm)
-				argumentString += ', '.join(argumentForms) + '\n' + arg['help']
+				argumentString += ', '.join(argumentForms) + '\n' + self.formatGroff(arg['help'])
 				toReturn.append(argumentString)
 
 		# Prepare longer description
