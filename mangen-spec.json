@@ -1,0 +1,85 @@
+{
+	"$schema": "../argspec/dual-arguments-schema.json",
+	"program": "mangen",
+	"description": "A man-page generator from JSON specifications following user-argspec",
+	"longDescription": "mangen takes input of a JSON file which specifies formally specifies the command-line interface of an application and generates a man page written in roff notation.\nBy default, the JSON spec is taken from stdin, and the man-output is given on stdout.",
+	"bugs": "Please report any bugs at <https://github.com/emperor-lang/mangen/issues>",
+	"date": "27/06/2019",
+	"author": "This is maintained by Edward Jones, and source code can be found at <https://github.com/emperor-lang/mangen>",
+	"licence": "Copyright (c) 2019, Edward Jones\n\n%%%%%%LICENSE_START(GPLv2+_DOC_FULL)\nThis is free documentation; you can redistribute it and/or\nmodify it under the terms of the GNU General Public License as\npublished by the Free Software Foundation; either version 2 of\nthe License, or (at your option) any later version.\n\nThe GNU General Public License's references to \"object code\"\nand \"executables\" are to be interpreted as the output of any\ndocument formatting or typesetting system, including\nintermediate and printed output.\n\nThis manual is distributed in the hope that it will be useful,\nbut WITHOUT ANY WARRANTY; without even the implied warranty of\nMERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\nGNU General Public License for more details.\n\nYou should have received a copy of the GNU General Public\nLicense along with this manual; if not, see\n<http://www.gnu.org/licenses/>.\n%%%%%%LICENSE_EN",
+	"version": "2.0.0",
+	"examples": [
+		{
+			"description": "Input a JSON spec and put its output in a file",
+			"input": "mangen <./spec.json >./program.1",
+			"output": "program.1 now contains the man page specified in spec.json"
+		}
+	],
+	"args": [
+		{
+			"mandatory": false,
+			"short": "-i",
+			"long": "--input",
+			"dest": "inputFile",
+			"default": "-",
+			"help": "The input file or `-` for stdin",
+			"type": "string"
+		},
+		{
+			"mandatory": false,
+			"type": "string",
+			"default": "-",
+			"short": "-o",
+			"long": "--output",
+			"dest": "outputFile",
+			"help": "The output file or `-` for stdout"
+		},
+		{
+			"mandatory": false,
+			"short": "-v",
+			"long": "--verbose",
+			"choices": ["0","1"],
+			"type": "int",
+			"default": "0",
+			"dest": "verbosity",
+			"help": "Specify the output verbosity (logging data is given on stderr)"
+		},
+		{
+			"short": "-h",
+			"long": "--help",
+			"type": "help",
+			"help": "Output a help message and exit",
+			"mandatory": false,
+			"default": "false",
+			"dest": "__help__"
+		},
+		{
+			"short": "-V",
+			"long": "--version",
+			"type": "flag",
+			"default": "false",
+			"mandatory": false,
+			"help": "Output the current version and exit",
+			"dest": "version"
+		},
+		{
+			"short": "-s",
+			"long": "--spec",
+			"type": "string",
+			"default": "",
+			"mandatory": false,
+			"dest": "spec",
+			"help": "Specify a different schema to validate against"
+		}
+	],
+	"seeAlso": [
+		{
+			"name": "arggen",
+			"manLocation": 1
+		},
+		{
+			"name": "argspec",
+			"manLocation": 7
+		}
+	]
+}
