@@ -1,204 +1,195 @@
-import argparse
-from datetime import date
+#!/usr/bin/python3
+
 import json
 import jsonschema
 import sys
-import os.path
-import argparse
+from cpython cimport bool
 
-schemaFile = r'../argspec/arguments.schema.json'
+schemaFile:str = '../argspec/user-arguments-schema.json'
 
-class TroffArgumentParser(object):
-	def __init__(self, json:dict=None, licence:[str]=[], version:str=None, seeAlso:[str]=[], date:str=date.today().strftime('%d %B %Y'), bugs:str=None, *args, **kwargs):
-		super(TroffArgumentParser, self).__init__(*args, **kwargs)
-		self.prog = json['program'] if json is not None and 'prog' in json else ''
-		self.description = json['description'] if json is not None and 'description' in json else '' 
-		self.licence = json['licence'] if json is not None and 'licence' in json else licence
-		self.version = json['version'] if json is not None and 'version' in json else version
-		self.date = json['date'] if json is not None and 'date' in json else date
-		self.seeAlso = json['seeAlso'] if json is not None and 'seeAlso' in json else seeAlso
-		self.bugs = json['bugs'] if json is not None and 'bugs' in json else bugs
-		self._actions:[argparse.Action] = json['args'] if json is not None and 'args' in json else []
-		self.epilog = json['about'] if json is not None and 'about' in json else None
-
-	def toTroff(self) -> str:
-		options:[argparse.Action] = self._actions
-		options.sort(key=lambda option : option['mandatory'])
-
-		troffOutput:str = self._header(self.prog, self.date, self.version, self.licence)
-		troffOutput += self._name(self.prog, self.description)
-		troffOutput += self._synopsis(self.prog, options)
-		troffOutput += self._description(self.description)
-		troffOutput += self._options(options)
-		troffOutput += self._seeAlso(self.seeAlso)
-		troffOutput += self._bugs(self.bugs)
-		troffOutput += self._authors(self.epilog)
-		return troffOutput
-
-	def _header(self, program:str, date:str, version:str, licence:[str]) -> str:
-		licenceString:str
-		if licence != []:
-			licenceString = ''.join(list(map(lambda line: r'.\" ' + line, licence))) + '\n'
-		else:
-			licenceString = ''
-		programVersion:str = f'{program} {version}' if version is not None else program
-		return f'{licenceString}.TH {program.upper()} 1 "{date}" "{programVersion}" "User Commands" "fdsa"\n'
-
-	def _name(self, prog:str, description:str) -> str:
-		return f'.SH "NAME"\n\\fB{prog}\\fP - {description}\n'
-
-	def _synopsis(self, prog:str, options:[argparse.Action]) -> str:
-		return f'.SH "SYNOPSIS"\n\\fB{prog}\\fP [OPTION]... [file... | -]\n'
-
-	def _description(self, description:str) -> str:
-		if description != '':
-			return f'.SH "DESCRIPTION"\n{description}\n'
-		else:
-			return ''
-
-	def _options(self, options:[argparse.Action]) -> str:
-		if options == []:
-			return ''
-		else:
-			description:str = f'.SH "OPTIONS"'
-			firstOption:bool = True
-			previousWasMandatory:bool = False
-			mandatory:bool = False
-			for option in options:
-				mandatory = option['mandatory']
-				if firstOption:
-					if mandatory:
-						description += f'\n.SS "Mandatory arguments"'
-					else:
-						description += f'\n.SS "Optional arguments"'
-				elif mandatory and not previousWasMandatory:
-					description += f'\n.SS "Mandatory arguments"'
-					doingMandatory = True
-				# 	switchToPrintingMandatoryOptions = False
-				# if not self._checkMandatory(option):
-				# 	switchToPrintingMandatoryOptions = True
-				optionString:str = self._formatList(option['option_strings']) if option['option_strings'] != [] else option['metavar']
-				optionString = r'\fB' + optionString + r'\fP '
-				if option['choices'] is not None:
-					choices:str = self._formatList(option['choices'], separator=',')
-					optionString += r'\fI{' + choices + r'}\fP'
-				elif option['nargs'] is None:
-					optionString += r'\fI' + (option['metavar'].upper() if option['metavar'] is not None else option['dest'].upper()) + r'\fP'
-					pass
-				elif option['nargs'] == '*':
-					pass
-				elif option['nargs'] == '+':
-					pass
-				elif int(option['nargs']) >= 0:
-					pass
-
-				optionHelp:str = option['help']
-				optionDescription:str = f'\n.TP\n{optionString}\n{optionHelp}'
-				description += optionDescription
-				firstOption = False
-				previousWasMandatory = option['mandatory']
-			return description + '\n'
-
-	def _formatList(self, lst:[str], separator:str=', ') -> str:
-		formattedList:str = ''
-		if lst is not None:
-			formattedList = ''
-			firstItem:bool = True
-			for item in lst:
-				if not firstItem:
-					formattedList += separator
-				firstItem = False
-				formattedList += item
-		return formattedList
-
-	def _seeAlso(self, seeAlso:[dict]) -> str:
-		if seeAlso == []:
-			return ''
-		else:
-			seeAlsoStrings:[str] = []
-			for x in seeAlso:
-				seeAlsoStrings += f'\\fB{x.name}({x.manLocation})'
-			seeAlsos:str = ', '.join(seeAlsoStrings)
-			return f'.SH "SEE ALSO"\n{seeAlsos}\n'
-
-	def _bugs(self, bugs:str) -> str:
-		return f'.SH "BUGS"\n{bugs}\n' if bugs is not None else ''
-
-	def _authors(self, epilog:str) -> str:
-		return f'.SH "AUTHOR"\n{epilog}\n' if epilog is not None else ''
-
-
-def printe(*args, **kwargs):
+def printe(*args, **kwargs) -> None:
 	print(*args, file=sys.stderr, **kwargs)
 
+cdef class Program:
+	cdef str title
+	cdef str shortDescription
+	cdef str longDescription
+	cdef str licence
+	cdef str version
+	cdef str date
+	cdef list seeAlso
+	cdef str bugs
+	cdef str author
+	cdef list args
+	cdef list examples
+	cdef bool autoGenerateSynopsis
 
-def parseArguments(args:[str]) -> argparse.Namespace:
-	parser: argparse.ArgumentParser = argparse.ArgumentParser()
+	def __cinit__(self, program:dict) -> None:
+		self.title = program['program'] # Mandatory 
+		self.args = program['args'] # Mandatory
+		self.args.sort(key=lambda arg:arg['short'].lower() if 'short' in arg else arg['long'].upper())
+		self.shortDescription = self.formatGroff(program['description'])	if 'description' in program else			None
+		self.longDescription = self.formatGroff(program['longDescription'])	if 'longDescription' in program else		None
+		self.licence = program['licence']									if 'licence' in program else 				None
+		self.version = program['version']									if 'version' in program else				None
+		self.date = program['date']											if 'date' in program else 					''
+		self.seeAlso = program['seeAlso']									if 'seeAlso' in program else				[]
+		self.bugs = self.formatGroff(program['bugs'])						if 'bugs' in program else					None
+		self.author = self.formatGroff(program['author'])					if 'author' in program else					None
+		self.examples = program['examples']									if 'examples' in program else				[]
+		self.autoGenerateSynopsis = program['autoGenerateSynopsis']			if 'autoGenerateSynopsis' in program else	True
 
-	parser.add_argument('-?', action='help', help='Show this help message and exit')
-	parser.add_argument('-', '--stdin', dest='useStdin', action='store_true', help='Use stdin', default=False)
-	parser.add_argument('-i', '--input_file', dest='inputFile', help='Input json spec', default=None)
-	parser.add_argument('-o', '--output_file', dest='outputFile', help='Man-page output file', default=sys.stdout)
+	cdef str formatGroff(self, inputString:str):
+		inputLines:[str] = inputString.split('\n')
+		return '\n.PP\n'.join(inputLines)
 
-	if len(args) == 0:
-		parser.print_usage(sys.stderr)
-	
-	return parser.parse_args(args)
+	def __dealloc__(self) -> None:
+		pass
+		# del self.title
+		# del self.shortDescription
+		# del self.longDescription
+		# del self.licence
+		# del self.version
+		# del self.date
+		# del self.seeAlso
+		# del self.bugs
+		# del self.about
+		# del self.args
+		# del self.examples
 
+	def __str__(self) -> str:
+		return self.toString()
+
+	cdef str toString(self):
+		toReturn:[str] = []
+		
+		# Prepare the licence
+		if self.licence is not None:
+			licenceStr:str = '.\\" ' + '\n.\\" '.join(self.licence.split('\n'))
+			toReturn.append(licenceStr)
+
+		# Prepare the header
+		programVersion:str = self.title
+		if self.version is not None:
+			programVersion += f' {self.version}'
+		header:str = f'.TH "{self.title.upper()}" "1" "{self.date}" "{programVersion}" "User Commands"'
+		toReturn.append(header)
+
+		# Prepare description
+		if self.shortDescription is not None:
+			# Make the first letter lowercase
+			shortDesc:str = self.shortDescription[0].lower()
+			if len(self.shortDescription) > 1:
+				shortDesc += self.shortDescription[1:]
+			programDescription:str = f'\\fB{self.title}\\fP - {shortDesc}'
+			toReturn.append(f'.SH "NAME"')
+			toReturn.append(programDescription)
+
+		# Prepare synopsis
+		if self.examples != []:
+			# Use specified synopsis
+			toReturn.append('.SH SYNOPSIS')
+			synopsis:[str] = []
+			for example in self.examples:
+				exampleParts:[str] = example['input'].split(' ')
+				synopsisString:str = f'\\fB{exampleParts[0]}\\fP'
+				for examplePart in exampleParts[1:]:
+					synopsisString += ' '
+					inOption:bool = False
+					for char in examplePart:
+						if not inOption:
+							if char == '-':
+								synopsisString += r'\fB'
+								inOption = True
+							synopsisString += char
+						else:
+							if char == ']' or char == '|':
+								synopsisString += r'\fP'
+								inOption = False
+								synopsisString += char
+							elif char == '=':
+								synopsisString += char + r'\fP'
+								inOption = False
+							else:
+								synopsisString += char
+				synopsis.append(synopsisString)
+			toReturn.append('\n.br\n'.join(synopsis))
+		elif self.autoGenerateSynopsis and self.args != []:
+			# Generate a synopsis
+			toReturn.append('.SH SYNOPSIS')
+			synopsis:list = [f'\\fB{self.title}\\fP']
+			self.args.sort(key=lambda arg:arg['mandatory'])
+			for argument in self.args:
+				argumentString:str = argument['short'] if 'short' in argument else argument['long']
+				synopsis.append(f"[\\fB{argumentString}\\fP]")
+			toReturn.append(' '.join(synopsis))
+		
+		# Prepare arguments
+		if self.args != []:
+			toReturn.append('.SH OPTIONS')
+			for arg in self.args:
+				argumentString:str = '.TP\n'
+				argumentForms:[str] = []
+				formKeys:[str] = (['short'] if 'short' in arg else []) + (['long'] if 'long' in arg else [])
+				choicesString:str = None
+				if 'choices' in arg:
+					choicesString = '{' + ','.join(arg['choices']) + '}'
+				for form in formKeys:
+					argumentForm:str = f'\\fB{arg[form]}\\fP'
+					if choicesString is not None:	
+						argumentForm += ' ' + choicesString
+					argumentForms.append(argumentForm)
+				argumentString += ', '.join(argumentForms) + '\n' + arg['help']
+				toReturn.append(argumentString)
+
+		# Prepare longer description
+		if self.longDescription is not None:
+			toReturn.append('.SH DESCRIPTION')
+			toReturn.append(self.longDescription)
+
+		# Prepare the see-alsos
+		if self.seeAlso != []:
+			toReturn.append('.SH "SEE ALSO"')
+			toReturn.append(', '.join([f'\\fB{toSee["name"]}\\fP({toSee["manLocation"]})' for toSee in self.seeAlso]))
+
+		# Prepare the bugs
+		if self.bugs is not None:
+			toReturn.append('.SH BUGS')
+			toReturn.append(self.bugs)
+
+		# Prepare the author
+		if self.author is not None:
+			toReturn.append('.SH AUTHOR')
+			toReturn.append(self.author)
+
+		return '\n'.join(toReturn)
 
 def main(args:[str]) -> int:
-	arguments:argparse.Namespace = parseArguments(args)
-
-	inputString:str
-	if arguments.useStdin:
-		inputString = input()
-	else:
-		if arguments.inputFile is not None:
-			if os.path.isfile(arguments.inputFile):
-				with open(arguments.inputFile, 'r+') as i:
-					inputString = i.read()
-			else:
-				printe(f'File "{arguments.inputFile}" does not exist')
-				return 126
-		else:
-			printe('Please specify an input file')
-			return 1
-
+	spec:dict
 	try:
-		jsonReturn:object = json.loads(inputString)
-		if type(jsonReturn) != dict:
-			printe(f'Got JSON of type "{type(jsonReturn).__name__}", expected a dictionary')
-			return 1
-		jsonDict:dict = jsonReturn
-	except json.decoder.JSONDecodeError as jsonDe:
-		printe('Could not decode JSON input')
-		printe(jsonDe)
-		return 1
+		spec = json.load(sys.stdin)
+	except json.decoder.JSONDecodeError as jsonde:
+		printe(str(jsonde) + f' while handling json from stdin')
+		return -1
 
 	schema:dict
 	with open(schemaFile, 'r+') as i:
-		schema = json.load(i)
-	 # schema = json.loads(rawSchema)
+		try:
+			schema = json.load(i)
+		except json.decoder.JSONDecodeError as jsonde:
+			printe(str(jsonde) + f' while handling schema in "{schemaFile}"')
+			return -1
 
 	try:
-		jsonschema.validate(instance=jsonDict, schema=schema)
+		jsonschema.validate(instance=spec, schema=schema)
 	except jsonschema.exceptions.ValidationError as ve:
 		printe(f'Input specification did not match the schema (using schema: "{schemaFile}"')
 		printe(str(ve))
 		return -1
 
-	troffArgumentParser:TroffArgumentParser = TroffArgumentParser(json=jsonDict)
-
-	# Output
-	outputString:str = troffArgumentParser.toTroff()
-	if arguments.outputFile == sys.stdout:
-		print(outputString, end='')
-	else:
-		with open(arguments.outputFile, 'w+') as o:
-			o.write(outputString)
-
-	return 0
-
+	program:Program = Program(spec)
+	sys.stdout.write(str(program))
+	sys.stdout.write('\n')
 
 if __name__ == '__main__':
 	sys.exit(main(sys.argv[1:]))

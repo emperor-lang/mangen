@@ -1,4 +1,4 @@
 *.py.c
 *.troff
-*.1
+*.[1-9]*
 mangen
