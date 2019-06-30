@@ -39,6 +39,9 @@ cdef class Program:
 		self.author = self.formatGroff(program['author'])					if 'author' in program else					None
 		self.examples = program['examples']									if 'examples' in program else				[]
 		self.autoGenerateSynopsis = program['autoGenerateSynopsis']			if 'autoGenerateSynopsis' in program else	True
+		for arg in self.args:
+			if 'mandatory' not in arg:
+				arg['mandatory'] = False
 
 	cdef str formatGroff(self, inputString:str):
 		# Rudamendary MD to roff converter---THIS IS REGULAR NOT CONTEXT FREE!
@@ -137,6 +140,7 @@ cdef class Program:
 		# Prepare arguments
 		if self.args != []:
 			toReturn.append('.SH OPTIONS')
+			# TODO: Add optional and mandatory sections
 			for arg in self.args:
 				argumentString:str = '.TP\n'
 				argumentForms:[str] = []
