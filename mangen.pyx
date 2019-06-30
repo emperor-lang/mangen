@@ -24,6 +24,8 @@ cdef class Program:
 	cdef list args
 	cdef list examples
 	cdef bool autoGenerateSynopsis
+	cdef list optionalArgs
+	cdef list mandatoryArgs
 
 	def __cinit__(self, program:dict) -> None:
 		self.title = program['program'] # Mandatory 
@@ -42,6 +44,10 @@ cdef class Program:
 		for arg in self.args:
 			if 'mandatory' not in arg:
 				arg['mandatory'] = False
+		self.optionalArgs = list(filter(lambda arg: not arg['mandatory'], program['args']))
+		self.mandatoryArgs = list(filter(lambda arg: arg['mandatory'], program['args']))
+		printe(self.optionalArgs)
+		printe(self.mandatoryArgs)
 
 	cdef str formatGroff(self, inputString:str):
 		# Rudamendary MD to roff converter---THIS IS REGULAR NOT CONTEXT FREE!
@@ -106,7 +112,17 @@ cdef class Program:
 			self.args.sort(key=lambda arg:arg['mandatory'])
 			for argument in self.args:
 				argumentString:str = argument['short'] if 'short' in argument else argument['long']
-				synopsisParts.append(f"[\\fB{argumentString}\\fP]")
+
+				# Add choices or variable
+				if 'choices' in argument:
+					argumentString += ' \\fR{\\fI' + '\\fR, \\fI'.join(argument['choices']) + '\\fR}'
+				elif 'metaDest' in argument and argument['type'] not in ['flag', 'help']:
+					argumentString += ' \\fI' + argument['metaDest'] + '\\fP'
+
+				if argument['mandatory']:
+					synopsisParts.append(f"\\fB{argumentString}\\fR")
+				else:
+					synopsisParts.append(f"[\\fB{argumentString}\\fR]")
 			synopsis.append(' '.join(synopsisParts))
 		# From examples
 		if self.examples != []:
@@ -140,21 +156,19 @@ cdef class Program:
 		# Prepare arguments
 		if self.args != []:
 			toReturn.append('.SH OPTIONS')
-			# TODO: Add optional and mandatory sections
-			for arg in self.args:
-				argumentString:str = '.TP\n'
-				argumentForms:[str] = []
-				formKeys:[str] = (['short'] if 'short' in arg else []) + (['long'] if 'long' in arg else [])
-				choicesString:str = None
-				if 'choices' in arg:
-					choicesString = '{' + ','.join(arg['choices']) + '}'
-				for form in formKeys:
-					argumentForm:str = f'\\fB{arg[form]}\\fP'
-					if choicesString is not None:	
-						argumentForm += ' ' + choicesString
-					argumentForms.append(argumentForm)
-				argumentString += ', '.join(argumentForms) + '\n' + self.formatGroff(arg['help'])
-				toReturn.append(argumentString)
+			outputSubsections:bool = self.mandatoryArgs != [] and self.optionalArgs != []
+
+			# Output subsection header and mandatory arguments
+			if outputSubsections:
+				toReturn.append('.SS "Mandatory Arguments"')
+			for arg in self.mandatoryArgs:
+				toReturn.append(self.processArgument(arg))
+
+			# Output subsection header and optional arguments
+			if outputSubsections:
+				toReturn.append('.SS "Optional Arguments"')
+			for arg in self.optionalArgs:
+				toReturn.append(self.processArgument(arg))
 
 		# Prepare longer description
 		if self.longDescription is not None:
@@ -177,6 +191,25 @@ cdef class Program:
 			toReturn.append(self.author)
 
 		return '\n'.join(toReturn)
+
+	cdef str processArgument(self, arg:dict):
+		argumentString:str = '.TP\n'
+		argumentForms:[str] = []
+		formKeys:[str] = (['short'] if 'short' in arg else []) + (['long'] if 'long' in arg else [])
+		optionBodyString:str = None
+		if 'choices' in arg:
+			optionBodyString = '\\fR{\\fI' + '\\fR, \\fI'.join(arg['choices']) + '\\fR}'
+		elif 'metaDest' in arg:
+			# TODO: Part of the schema?
+			optionBodyString = arg['metaDest']
+			
+		for form in formKeys:
+			argumentForm:str = f'\\fB{arg[form]}\\fP'
+			if optionBodyString is not None:	
+				argumentForm += ' ' + optionBodyString
+			argumentForms.append(argumentForm)
+		argumentString += ', '.join(argumentForms) + '\n' + self.formatGroff(arg['help'])
+		return argumentString
 
 def main(args:[str]) -> int:
 	spec:dict
