@@ -46,8 +46,6 @@ cdef class Program:
 				arg['mandatory'] = False
 		self.optionalArgs = list(filter(lambda arg: not arg['mandatory'], program['args']))
 		self.mandatoryArgs = list(filter(lambda arg: arg['mandatory'], program['args']))
-		printe(self.optionalArgs)
-		printe(self.mandatoryArgs)
 
 	cdef str formatGroff(self, inputString:str):
 		# Rudamendary MD to roff converter---THIS IS REGULAR NOT CONTEXT FREE!
@@ -134,13 +132,13 @@ cdef class Program:
 					synopsisString += ' '
 					inOption:bool = False
 					for char in examplePart:
-						if not inOption:
+						if not inOption and len(examplePart) > 1:
 							if char == '-':
 								synopsisString += r'\fB'
 								inOption = True
 							synopsisString += char
 						else:
-							if char == ']' or char == '|':
+							if char in [']', '|', ' ', '\t', '\n']:
 								synopsisString += r'\fP'
 								inOption = False
 								synopsisString += char
@@ -149,6 +147,8 @@ cdef class Program:
 								inOption = False
 							else:
 								synopsisString += char
+					# if inOption:
+					# 	synopsisString += r'\fP'
 				synopsis.append(synopsisString)
 		if synopsis != []:
 			toReturn.append('\n.br\n'.join(synopsis))
